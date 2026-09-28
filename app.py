@@ -1,300 +1,175 @@
-import os
-import sqlite3
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_change_in_production'
+app.secret_key = "haya_secret_key"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# مسار قاعدة البيانات الآمن
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'trucks_advanced.db')
+db = SQLAlchemy(app)
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# جدول المستخدمين (أدمن / سائق / زبون)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(20), nullable=False) # 'admin', 'driver', 'customer'
 
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT DEFAULT 'user'
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS trucks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            plate_number TEXT UNIQUE NOT NULL,
-            driver_name TEXT NOT NULL,
-            status TEXT DEFAULT 'متاحة',
-            capacity INTEGER NOT NULL
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# جدول الشاحنات
+class Truck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    plate_number = db.Column(db.String(50), nullable=False)
+    driver_name = db.Column(db.String(100), nullable=False)
+    capacity = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(50), default='متاحة')
 
-init_db()
+# جدول طلبات النقل (للزبائن)
+class Booking(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(100), nullable=False)
+    cargo_type = db.Column(db.String(100), nullable=False)
+    weight = db.Column(db.Float, nullable=False)
+    pickup_location = db.Column(db.String(100), nullable=False)
+    destination = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(50), default='قيد الانتظار')
 
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق إدارة الشاحنات</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark mb-4">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="#">🚚 نظام الشاحنات</a>
-            {% if session.user_id %}
-                <span class="navbar-text text-white ms-auto me-3">مرحباً، {{ session.username }}</span>
-                <a href="/logout" class="btn btn-outline-danger btn-sm">تسجيل الخروج</a>
-            {% endif %}
-        </div>
-    </nav>
-
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        {% if page == 'login' %}
-        <div class="row justify-content-center">
-            <div class="col-md-5">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white text-center"><h4>تسجيل الدخول</h4></div>
-                    <div class="card-body">
-                        <form method="POST" action="/login">
-                            <div class="mb-3">
-                                <label class="form-label">اسم المستخدم</label>
-                                <input type="text" name="username" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">كلمة المرور</label>
-                                <input type="password" name="password" class="form-control" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">دخول</button>
-                        </form>
-                        <p class="mt-3 text-center">ليس لديك حساب؟ <a href="/register">سجل الآن</a></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% elif page == 'register' %}
-        <div class="row justify-content-center">
-            <div class="col-md-5">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-success text-white text-center"><h4>إنشاء حساب جديد</h4></div>
-                    <div class="card-body">
-                        <form method="POST" action="/register">
-                            <div class="mb-3">
-                                <label class="form-label">اسم المستخدم</label>
-                                <input type="text" name="username" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">كلمة المرور</label>
-                                <input type="password" name="password" class="form-control" required>
-                            </div>
-                            <button type="submit" class="btn btn-success w-100">تسجيل</button>
-                        </form>
-                        <p class="mt-3 text-center">لديك حساب بالفعل؟ <a href="/">تسجيل الدخول</a></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% elif page == 'dashboard' %}
-        <div class="row mb-4">
-            <div class="col-md-4 mb-3">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-dark text-white"><h5>إضافة شاحنة جديدة</h5></div>
-                    <div class="card-body">
-                        <form method="POST" action="/add_truck">
-                            <div class="mb-2">
-                                <label>رقم لوحة الشاحنة</label>
-                                <input type="text" name="plate_number" class="form-control" required>
-                            </div>
-                            <div class="mb-2">
-                                <label>اسم السائق</label>
-                                <input type="text" name="driver_name" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label>الحمولة (طن)</label>
-                                <input type="number" name="capacity" class="form-control" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">إضافة الشاحنة</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-dark text-white"><h5>قائمة الشاحنات المسجلة</h5></div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>اللوحة</th>
-                                        <th>السائق</th>
-                                        <th>الحمولة</th>
-                                        <th>الحالة</th>
-                                        <th>إجراءات</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for truck in trucks %}
-                                    <tr>
-                                        <td><strong>{{ truck['plate_number'] }}</strong></td>
-                                        <td>{{ truck['driver_name'] }}</td>
-                                        <td>{{ truck['capacity'] }} طن</td>
-                                        <td>
-                                            <span class="badge {% if truck['status'] == 'متاحة' %}bg-success{% elif truck['status'] == 'في الطريق' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                                                {{ truck['status'] }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <form method="POST" action="/update_status/{{ truck['id'] }}" class="d-inline">
-                                                <select name="status" onchange="this.form.submit()" class="form-select form-select-sm d-inline-block w-auto">
-                                                    <option value="متاحة" {% if truck['status'] == 'متاحة' %}selected{% endif %}>متاحة</option>
-                                                    <option value="في الطريق" {% if truck['status'] == 'في الطريق' %}selected{% endif %}>في الطريق</option>
-                                                    <option value="صيانة" {% if truck['status'] == 'صيانة' %}selected{% endif %}>صيانة</option>
-                                                </select>
-                                            </form>
-                                            <a href="/delete_truck/{{ truck['id'] }}" class="btn btn-sm btn-outline-danger me-1">حذف</a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-</body>
-</html>
-'''
+with app.app_context():
+    db.create_all()
 
 @app.route('/')
-def index():
-    if 'user_id' in session:
-        return redirect(url_for('dashboard'))
-    return render_template_string(HTML_TEMPLATE, page='login')
+def home():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    
+    role = session.get('role')
+    username = session.get('username')
+    
+    if username == "لعور حوسين" or role == 'admin':
+        return redirect(url_for('admin'))
+    elif role == 'driver':
+        return redirect(url_for('driver_dashboard'))
+    else:
+        # واجهة الزبون
+        trucks = Truck.query.filter_by(status='متاحة').all()
+        my_bookings = Booking.query.filter_by(customer_name=username).all()
+        return render_template('index.html', trucks=trucks, bookings=my_bookings)
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username, password=password).first()
+        
+        if user:
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['role'] = user.role
+            
+            if user.username == "لعور حوسين" or user.role == 'admin':
+                return redirect(url_for('admin'))
+            elif user.role == 'driver':
+                return redirect(url_for('driver_dashboard'))
+            else:
+                return redirect(url_for('home'))
+        else:
+            flash("بيانات الدخول غير صحيحة!")
+            
+    return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        password = generate_password_hash(request.form['password'])
+        username = request.form.get('username')
+        password = request.form.get('password')
+        role = request.form.get('role', 'customer')
         
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
-            conn.commit()
-            flash('تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.', 'success')
-            return redirect(url_for('index'))
-        except sqlite3.IntegrityError:
-            flash('اسم المستخدم موجود بالفعل، اختر اسماً آخر.', 'danger')
-        finally:
-            conn.close()
-    return render_template_string(HTML_TEMPLATE, page='register')
+        # لعور حوسين هو المسؤول دائماً
+        if username == "لعور حوسين":
+            role = 'admin'
+            
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash("اسم المستخدم مسجل مسبقاً!")
+            return redirect(url_for('register'))
+            
+        new_user = User(username=username, password=password, role=role)
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash("تم إنشاء الحساب بنجاح!")
+        return redirect(url_for('login'))
+        
+    return render_template('register.html')
 
-@app.route('/login', methods=['POST'])
-def login():
-    username = request.form['username']
-    password = request.form['password']
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-    user = cursor.fetchone()
-    conn.close()
-    
-    if user and check_password_hash(user['password'], password):
-        session['user_id'] = user['id']
-        session['username'] = user['username']
-        return redirect(url_for('dashboard'))
-    else:
-        flash('بيانات الدخول غير صحيحة!', 'danger')
-        return redirect(url_for('index'))
+@app.route('/admin')
+def admin():
+    if session.get('username') != "لعور حوسين" and session.get('role') != 'admin':
+        flash("غير مسموح لك بالدخول هنا!")
+        return redirect(url_for('login'))
+        
+    trucks = Truck.query.all()
+    bookings = Booking.query.all()
+    return render_template('admin.html', trucks=trucks, bookings=bookings)
 
-@app.route('/dashboard')
-def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
+@app.route('/driver')
+def driver_dashboard():
+    if session.get('role') != 'driver':
+        return redirect(url_for('login'))
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM trucks')
-    trucks = cursor.fetchall()
-    conn.close()
-    return render_template_string(HTML_TEMPLATE, page='dashboard', trucks=trucks)
+    driver_name = session.get('username')
+    my_trucks = Truck.query.filter_by(driver_name=driver_name).all()
+    return render_template('driver.html', trucks=my_trucks)
+
+@app.route('/book_truck', methods=['POST'])
+def book_truck():
+    if session.get('role') == 'customer':
+        cargo = request.form.get('cargo_type')
+        weight = request.form.get('weight')
+        pickup = request.form.get('pickup_location')
+        dest = request.form.get('destination')
+        
+        new_booking = Booking(
+            customer_name=session['username'],
+            cargo_type=cargo,
+            weight=weight,
+            pickup_location=pickup,
+            destination=dest
+        )
+        db.session.add(new_booking)
+        db.session.commit()
+        flash("تم تقديم طلب النقل بنجاح!")
+        
+    return redirect(url_for('home'))
 
 @app.route('/add_truck', methods=['POST'])
 def add_truck():
-    if 'user_id' in session:
-        plate = request.form['plate_number']
-        driver = request.form['driver_name']
-        capacity = request.form['capacity']
+    if session.get('username') == "لعور حوسين" or session.get('role') == 'admin':
+        plate = request.form.get('plate_number')
+        driver = request.form.get('driver_name')
+        capacity = request.form.get('capacity')
         
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('INSERT INTO trucks (plate_number, driver_name, capacity) VALUES (?, ?, ?)', (plate, driver, capacity))
-            conn.commit()
-            flash('تمت إضافة الشاحنة بنجاح', 'success')
-        except sqlite3.IntegrityError:
-            flash('رقم اللوحة مسجل مسبقاً!', 'warning')
-        finally:
-            conn.close()
-    return redirect(url_for('dashboard'))
+        new_truck = Truck(plate_number=plate, driver_name=driver, capacity=capacity)
+        db.session.add(new_truck)
+        db.session.commit()
+        
+    return redirect(url_for('admin'))
 
-@app.route('/update_status/<int:truck_id>', methods=['POST'])
-def update_status(truck_id):
-    if 'user_id' in session:
-        new_status = request.form['status']
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('UPDATE trucks SET status = ? WHERE id = ?', (new_status, truck_id))
-        conn.commit()
-        conn.close()
-    return redirect(url_for('dashboard'))
-
-@app.route('/delete_truck/<int:truck_id>')
-def delete_truck(truck_id):
-    if 'user_id' in session:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM trucks WHERE id = ?', (truck_id,))
-        conn.commit()
-        conn.close()
-        flash('تم حذف الشاحنة', 'info')
-    return redirect(url_for('dashboard'))
+@app.route('/delete_truck/<int:id>')
+def delete_truck(id):
+    if session.get('username') == "لعور حوسين" or session.get('role') == 'admin':
+        truck = Truck.query.get(id)
+        if truck:
+            db.session.delete(truck)
+            db.session.commit()
+            
+    return redirect(url_for('admin'))
 
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
