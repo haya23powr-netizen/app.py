@@ -22,16 +22,14 @@ class User(db.Model):
 
 class Truck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    national_id = db.Column(db.String(50), nullable=False) # رقم التعريف الوطني
-    phone_number = db.Column(db.String(20), nullable=False) # رقم الهاتف
-    cargo_description = db.Column(db.String(200), nullable=False) # وصف نوع الحمولة
+    national_id = db.Column(db.String(50), nullable=False)
+    phone_number = db.Column(db.String(20), nullable=False)
+    cargo_description = db.Column(db.String(200), nullable=False)
     driver_name = db.Column(db.String(100), nullable=False)
     capacity = db.Column(db.Float, nullable=False)
 
 with app.app_context():
-    db.drop_all() # Re-create table structure to apply new columns without SQL errors
     db.create_all()
-    # Check if main admin exists, else create
     admin = User.query.filter_by(username='لعور حوسين').first()
     if not admin:
         hashed_pw = generate_password_hash('123456', method='pbkdf2:sha256')
@@ -201,14 +199,39 @@ HTML_CUSTOMER = '''
     <title>واجهة الزبائن</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
-        .card { background: white; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto; text-align: center; }
+        .header { background-color: #27ae60; color: white; padding: 15px; border-radius: 8px; }
+        .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        th { background-color: #2e7d32; color: white; }
+        .btn-call { background-color: #27ae60; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>أهلاً بك يا {{ session['username'] }} في منصة خدمات النقل</h2>
-        <p>يمكنك تقديم طلبات نقل البضائع واختيار الشاحنة المناسبة لنقل حمولتك بسهولة.</p>
-        <a href="/logout" style="color: red;">تسجيل الخروج</a>
+    <div class="header">
+        <h1>أهلاً بك يا {{ session['username'] }} في منصة خدمات النقل</h1>
+        <a href="/logout" style="color: white; font-weight: bold;">تسجيل الخروج</a>
+    </div>
+    <div class="container">
+        <h3>قائمة الشاحنات والسائقين المتاحين للنقل</h3>
+        <table>
+            <tr>
+                <th>اسم السائق</th>
+                <th>نوع الحمولة المتاحة</th>
+                <th>أقصى حمولة (طن)</th>
+                <th>رقم الهاتف للتواصل</th>
+            </tr>
+            {% for truck in trucks %}
+            <tr>
+                <td>{{ truck.driver_name }}</td>
+                <td>{{ truck.cargo_description }}</td>
+                <td>{{ truck.capacity }}</td>
+                <td><a href="tel:{{ truck.phone_number }}" class="btn-call">📞 {{ truck.phone_number }}</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">لا يـوجد سائقين متاحين حالياً، يرجى التحقق لاحقاً.</td></tr>
+            {% endfor %}
+        </table>
     </div>
 </body>
 </html>
@@ -287,7 +310,8 @@ def driver_dashboard():
 def customer_dashboard():
     if session.get('role') != 'customer':
         return redirect(url_for('home'))
-    return render_template_string(HTML_CUSTOMER)
+    trucks = Truck.query.all()
+    return render_template_string(HTML_CUSTOMER, trucks=trucks)
 
 @app.route('/add_truck', methods=['POST'])
 def add_truck():
