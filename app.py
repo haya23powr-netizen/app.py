@@ -44,30 +44,40 @@ HTML_LOGIN = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق شاحنات النقل</title>
+    <title>تسجيل الدخول</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f6f9; text-align: center; padding: 20px; direction: rtl; }
         .card { background: white; padding: 30px; border-radius: 10px; max-width: 400px; margin: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h2 { color: #2c3e50; }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background-color: #27ae60; color: white; font-weight: bold; cursor: pointer; border: none; }
+        h2 { color: #2c3e50; margin-bottom: 20px; }
+        .form-group { text-align: right; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+        input, select, button { width: 100%; padding: 12px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
+        button { background-color: #27ae60; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
         button:hover { background-color: #219150; }
         .link { margin-top: 15px; display: block; color: #2980b9; text-decoration: none; }
+        .alert { color: green; font-weight: bold; margin-bottom: 15px; }
+        .error { color: red; font-weight: bold; margin-bottom: 15px; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>تسجيل الدخول - تطبيق الشاحنات</h2>
-        {% with messages = get_flashed_messages() %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
-            {% for message in messages %}
-              <p style="color: red;">{{ message }}</p>
+            {% for category, message in messages %}
+              <p class="{{ category }}">{{ message }}</p>
             {% endfor %}
           {% endif %}
         {% endwith %}
         <form action="/login" method="POST">
-            <input type="text" name="username" placeholder="اسم المستخدم" required>
-            <input type="password" name="password" placeholder="كلمة المرور" required>
+            <div class="form-group">
+                <label>اسم المستخدم:</label>
+                <input type="text" name="username" placeholder="أدخل اسم المستخدم" required>
+            </div>
+            <div class="form-group">
+                <label>كلمة المرور:</label>
+                <input type="password" name="password" placeholder="أدخل كلمة المرور" required>
+            </div>
             <button type="submit">دخول</button>
         </form>
         <a class="link" href="/register">إنشاء حساب جديد</a>
@@ -86,23 +96,43 @@ HTML_REGISTER = '''
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f6f9; text-align: center; padding: 20px; direction: rtl; }
         .card { background: white; padding: 30px; border-radius: 10px; max-width: 400px; margin: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background-color: #2980b9; color: white; font-weight: bold; cursor: pointer; border: none; }
+        h2 { color: #2c3e50; margin-bottom: 20px; }
+        .form-group { text-align: right; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+        input, select, button { width: 100%; padding: 12px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
+        button { background-color: #2980b9; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
+        .error { color: red; font-weight: bold; margin-bottom: 15px; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>حساب جديد</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <p class="{{ category }}">{{ message }}</p>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
         <form action="/register" method="POST">
-            <input type="text" name="username" placeholder="اسم المستخدم" required>
-            <input type="password" name="password" placeholder="كلمة المرور" required>
-            <select name="role">
-                <option value="customer">زبون (طلب شاحنة)</option>
-                <option value="driver">سائق شاحنة</option>
-            </select>
-            <button type="submit">تسجيل الحساب</button>
+            <div class="form-group">
+                <label>اسم المستخدم:</label>
+                <input type="text" name="username" placeholder="اختر اسم المستخدم" required>
+            </div>
+            <div class="form-group">
+                <label>كلمة المرور:</label>
+                <input type="password" name="password" placeholder="اختر كلمة المرور" required>
+            </div>
+            <div class="form-group">
+                <label>نوع الحساب:</label>
+                <select name="role">
+                    <option value="customer">زبون (طلب شاحنة)</option>
+                    <option value="driver">سائق شاحنة</option>
+                </select>
+            </div>
+            <button type="submit">تسجيل الحساب والدخول مباشرة</button>
         </form>
-        <a href="/">العودة لتسجيل الدخول</a>
+        <a href="/" style="display: block; margin-top: 15px; color: #777;">العودة لتسجيل الدخول</a>
     </div>
 </body>
 </html>
@@ -113,22 +143,22 @@ HTML_ADMIN = '''
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة التحكم - لعور حوسين</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
-        .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 8px; }
-        .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; }
+        .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 8px; text-align: center; }
+        .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
         th { background-color: #34495e; color: white; }
         .btn-delete { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; }
-        .btn-delete:hover { background-color: #c0392b; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>مرحباً بك: المدير لعور حوسين</h1>
-        <a href="/logout" style="color: #e74c3c; font-weight: bold;">تسجيل الخروج</a>
+        <a href="/logout" style="color: #e74c3c; font-weight: bold; text-decoration: none;">تسجيل الخروج</a>
     </div>
     <div class="container">
         <h3>قائمة خدمات السائقين المتاحة في النظام</h3>
@@ -166,26 +196,59 @@ HTML_DRIVER = '''
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>واجهة السائق</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
-        .card { background: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: auto; }
-        input, textarea, button { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-        button { background-color: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .card { background: white; padding: 25px; border-radius: 10px; max-width: 500px; margin: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { color: #d35400; text-align: center; margin-bottom: 5px; }
+        h3 { text-align: center; color: #555; margin-bottom: 20px; font-size: 16px; }
+        .form-group { text-align: right; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+        input, textarea, button { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px; }
+        button { background-color: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; }
+        button:hover { background-color: #d35400; }
+        .alert-success { background-color: #d4edda; color: #155724; padding: 12px; border-radius: 5px; border: 1px solid #c3e6cb; margin-bottom: 15px; text-align: center; font-weight: bold; }
+        .logout-link { display: block; text-align: center; margin-top: 20px; color: #c0392b; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>لوحة السائق: {{ session['username'] }}</h2>
         <h3>تسجيل بيانات الخدمة والحمولة</h3>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert-success">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
         <form action="/add_truck" method="POST">
-            <input type="text" name="national_id" placeholder="رقم التعريف الوطني" required>
-            <input type="tel" name="phone_number" placeholder="رقم الهاتف" required>
-            <textarea name="cargo_description" placeholder="وصف نوع الحمولة (مثال: مواد بناء، مواد غذائية...)" rows="3" required></textarea>
-            <input type="number" step="0.1" name="capacity" placeholder="الحمولة الكلية (بالطن)" required>
-            <button type="submit">إضافة للخدمة</button>
+            <div class="form-group">
+                <label>رقم التعريف الوطني:</label>
+                <input type="text" name="national_id" placeholder="أدخل رقم التعريف الوطني" required>
+            </div>
+            
+            <div class="form-group">
+                <label>رقم الهاتف:</label>
+                <input type="tel" name="phone_number" placeholder="أدخل رقم الهاتف للتواصل" required>
+            </div>
+
+            <div class="form-group">
+                <label>وصف نوع الحمولة:</label>
+                <textarea name="cargo_description" placeholder="مثال: مواد بناء، مواد غذائية، أثاث..." rows="3" required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>الحمولة الكلية (بالطن):</label>
+                <input type="number" step="0.1" name="capacity" placeholder="مثال: 10" required>
+            </div>
+
+            <button type="submit">إرسال الطلب وإضافة للخدمة</button>
         </form>
-        <a href="/logout">تسجيل الخروج</a>
+        <a class="logout-link" href="/logout">تسجيل الخروج</a>
     </div>
 </body>
 </html>
@@ -196,21 +259,22 @@ HTML_CUSTOMER = '''
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>واجهة الزبائن</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
-        .header { background-color: #27ae60; color: white; padding: 15px; border-radius: 8px; }
-        .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; }
+        .header { background-color: #27ae60; color: white; padding: 15px; border-radius: 8px; text-align: center; }
+        .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
         th { background-color: #2e7d32; color: white; }
-        .btn-call { background-color: #27ae60; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; }
+        .btn-call { background-color: #27ae60; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; display: inline-block; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>أهلاً بك يا {{ session['username'] }} في منصة خدمات النقل</h1>
-        <a href="/logout" style="color: white; font-weight: bold;">تسجيل الخروج</a>
+        <h2>أهلاً بك يا {{ session['username'] }} في منصة خدمات النقل</h2>
+        <a href="/logout" style="color: white; font-weight: bold; text-decoration: none;">تسجيل الخروج</a>
     </div>
     <div class="container">
         <h3>قائمة الشاحنات والسائقين المتاحين للنقل</h3>
@@ -229,7 +293,7 @@ HTML_CUSTOMER = '''
                 <td><a href="tel:{{ truck.phone_number }}" class="btn-call">📞 {{ truck.phone_number }}</a></td>
             </tr>
             {% else %}
-            <tr><td colspan="4">لا يـوجد سائقين متاحين حالياً، يرجى التحقق لاحقاً.</td></tr>
+            <tr><td colspan="4">لا يوجد سائقين متاحين حالياً، يرجى التحقق لاحقاً.</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -270,7 +334,7 @@ def login():
             else:
                 return redirect(url_for('customer_dashboard'))
 
-        flash('اسم المستخدم أو كلمة المرور غير صحيحة')
+        flash('اسم المستخدم أو كلمة المرور غير صحيحة', 'error')
         return redirect(url_for('home'))
     return render_template_string(HTML_LOGIN)
 
@@ -282,15 +346,24 @@ def register():
         role = request.form.get('role', 'customer')
 
         if User.query.filter_by(username=username).first():
-            flash('اسم المستخدم مستعمل بالفعل!')
+            flash('اسم المستخدم مستعمل بالفعل!', 'error')
             return redirect(url_for('register'))
 
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
         new_user = User(username=username, password_hash=hashed_pw, role=role)
         db.session.add(new_user)
         db.session.commit()
-        flash('تم إنشاء الحساب بنجاح، يمكنك التسجيل الآن')
-        return redirect(url_for('home'))
+
+        # تسجيل الدخول تلقائياً بعد إنشاء الحساب
+        session['user_id'] = new_user.id
+        session['username'] = new_user.username
+        session['role'] = new_user.role
+
+        if new_user.role == 'driver':
+            return redirect(url_for('driver_dashboard'))
+        else:
+            return redirect(url_for('customer_dashboard'))
+
     return render_template_string(HTML_REGISTER)
 
 @app.route('/admin')
@@ -330,6 +403,9 @@ def add_truck():
         )
         db.session.add(new_truck)
         db.session.commit()
+
+        flash('تم إرسال بيانات الشاحنة بنجاح وبانتظار موافقة المسؤول.', 'success')
+
     return redirect(url_for('driver_dashboard'))
 
 @app.route('/delete_truck/<int:truck_id>')
