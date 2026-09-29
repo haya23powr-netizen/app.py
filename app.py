@@ -22,7 +22,9 @@ class User(db.Model):
 
 class Truck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    plate_number = db.Column(db.String(50), nullable=False)
+    national_id = db.Column(db.String(50), nullable=False) # رقم التعريف الوطني
+    phone_number = db.Column(db.String(20), nullable=False) # رقم الهاتف
+    cargo_description = db.Column(db.String(200), nullable=False) # وصف نوع الحمولة
     driver_name = db.Column(db.String(100), nullable=False)
     capacity = db.Column(db.Float, nullable=False)
 
@@ -120,6 +122,8 @@ HTML_ADMIN = '''
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
         th { background-color: #34495e; color: white; }
+        .btn-delete { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; }
+        .btn-delete:hover { background-color: #c0392b; }
     </style>
 </head>
 <body>
@@ -128,21 +132,29 @@ HTML_ADMIN = '''
         <a href="/logout" style="color: #e74c3c; font-weight: bold;">تسجيل الخروج</a>
     </div>
     <div class="container">
-        <h3>قائمة الشاحنات المتاحة في النظام</h3>
+        <h3>قائمة خدمات السائقين المتاحة في النظام</h3>
         <table>
             <tr>
-                <th>رقم اللوحة</th>
                 <th>اسم السائق</th>
+                <th>رقم التعريف الوطني</th>
+                <th>رقم الهاتف</th>
+                <th>وصف نوع الحمولة</th>
                 <th>الحمولة (طناً)</th>
+                <th>الإجراء</th>
             </tr>
             {% for truck in trucks %}
             <tr>
-                <td>{{ truck.plate_number }}</td>
                 <td>{{ truck.driver_name }}</td>
+                <td>{{ truck.national_id }}</td>
+                <td>{{ truck.phone_number }}</td>
+                <td>{{ truck.cargo_description }}</td>
                 <td>{{ truck.capacity }}</td>
+                <td>
+                    <a href="/delete_truck/{{ truck.id }}" class="btn-delete" onclick="return confirm('هل أنت تأكد من حذف هذا السجل؟');">حذف</a>
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="3">لا توجد شاحنات مسجلة حالياً</td></tr>
+            <tr><td colspan="6">لا توجد سجلات مسجلة حالياً</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -159,18 +171,20 @@ HTML_DRIVER = '''
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
         .card { background: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: auto; }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; }
-        button { background-color: #e67e22; color: white; border: none; font-weight: bold; }
+        input, textarea, button { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { background-color: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>لوحة السائق: {{ session['username'] }}</h2>
-        <h3>إضافة شاحنة جديدة</h3>
+        <h3>تسجيل بيانات الخدمة والحمولة</h3>
         <form action="/add_truck" method="POST">
-            <input type="text" name="plate_number" placeholder="رقم ترقيم الشاحنة" required>
+            <input type="text" name="national_id" placeholder="رقم التعريف الوطني" required>
+            <input type="tel" name="phone_number" placeholder="رقم الهاتف" required>
+            <textarea name="cargo_description" placeholder="وصف نوع الحمولة (مثال: مواد بناء، مواد غذائية...)" rows="3" required></textarea>
             <input type="number" step="0.1" name="capacity" placeholder="الحمولة الكلية (بالطن)" required>
-            <button type="submit">إضافة الشاحنة للنظام</button>
+            <button type="submit">إضافة للخدمة</button>
         </form>
         <a href="/logout">تسجيل الخروج</a>
     </div>
@@ -277,12 +291,30 @@ def customer_dashboard():
 @app.route('/add_truck', methods=['POST'])
 def add_truck():
     if session.get('role') == 'driver':
-        plate_number = request.form['plate_number']
+        national_id = request.form['national_id']
+        phone_number = request.form['phone_number']
+        cargo_description = request.form['cargo_description']
         capacity = request.form['capacity']
-        new_truck = Truck(plate_number=plate_number, driver_name=session['username'], capacity=float(capacity))
+
+        new_truck = Truck(
+            national_id=national_id,
+            phone_number=phone_number,
+            cargo_description=cargo_description,
+            driver_name=session['username'],
+            capacity=float(capacity)
+        )
         db.session.add(new_truck)
         db.session.commit()
     return redirect(url_for('driver_dashboard'))
+
+@app.route('/delete_truck/<int:truck_id>')
+def delete_truck(truck_id):
+    if session.get('role') == 'admin' or session.get('username') == 'لعور حوسين':
+        truck = Truck.query.get(truck_id)
+        if truck:
+            db.session.delete(truck)
+            db.session.commit()
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/logout')
 def logout():
