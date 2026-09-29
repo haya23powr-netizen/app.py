@@ -1,15 +1,25 @@
 import os
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash
+from flask import Flask, render_template_string, request, redirect, url_for, session, flash, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_change_in_production'
 
-# Database Setup
+# Database & Upload Setup
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'trucks.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# مجلد حفظ صور بطاقات التعريف
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 db = SQLAlchemy(app)
 
@@ -23,12 +33,13 @@ class User(db.Model):
 class Truck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     national_id = db.Column(db.String(50), nullable=False)
+    id_card_image = db.Column(db.String(200), nullable=True) # اسم ملف صورة البطاقة
     phone_number = db.Column(db.String(20), nullable=False)
     cargo_description = db.Column(db.String(200), nullable=False)
     driver_name = db.Column(db.String(100), nullable=False)
     capacity = db.Column(db.Float, nullable=False)
-    price = db.Column(db.Float, nullable=False, default=0.0) # السعر بالدينار
-    is_approved = db.Column(db.Boolean, default=False) # حالة موافقة المسؤول
+    price = db.Column(db.Float, nullable=False, default=0.0)
+    is_approved = db.Column(db.Boolean, default=False)
 
 with app.app_context():
     db.create_all()
@@ -151,12 +162,14 @@ HTML_ADMIN = '''
         .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 8px; text-align: center; }
         .container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; vertical-align: middle; }
         th { background-color: #34495e; color: white; }
         .btn-approve { background-color: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; margin-left: 5px; }
         .btn-delete { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; }
         .badge-pending { background-color: #f39c12; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
         .badge-approved { background-color: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .id-img { max-width: 80px; max-height: 50px; border-radius: 4px; border: 1px solid #ccc; }
+        .id-link { display: inline-block; text-decoration: none; font-size: 12px; color: #2980b9; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -165,14 +178,15 @@ HTML_ADMIN = '''
         <a href="/logout" style="color: #e74c3c; font-weight: bold; text-decoration: none;">تسجيل الخروج</a>
     </div>
     <div class="container">
-        <h3>إدارة طلبات الشاحنات والسائقين</h3>
+        <h3>إدارة ومراجعة طلبات الشاحنات</h3>
         <table>
             <tr>
                 <th>اسم السائق</th>
                 <th>رقم الهوية / الهاتف</th>
-                <th>وصف نوع الحمولة</th>
-                <th>الحمولة (طناً)</th>
-                <th>السعر المحدّد</th>
+                <th>بطاقة التعريف</th>
+                <th>نوع الحمولة</th>
+                <th>الحمولة</th>
+                <th>السعر</th>
                 <th>الحالة</th>
                 <th>الإجراء</th>
             </tr>
@@ -180,6 +194,16 @@ HTML_ADMIN = '''
             <tr>
                 <td>{{ truck.driver_name }}</td>
                 <td>{{ truck.national_id }} <br> <small>{{ truck.phone_number }}</small></td>
+                <td>
+                    {% if truck.id_card_image %}
+                        <a href="/uploads/{{ truck.id_card_image }}" target="_blank" class="id-link">
+                            <img src="/uploads/{{ truck.id_card_image }}" class="id-img" alt="البطاقة"><br>
+                            معاينة البطاقة
+                        </a>
+                    {% else %}
+                        <span style="color: #999;">لا توجد صورة</span>
+                    {% endif %}
+                </td>
                 <td>{{ truck.cargo_description }}</td>
                 <td>{{ truck.capacity }} طن</td>
                 <td><strong>{{ truck.price }} دج</strong></td>
@@ -198,7 +222,7 @@ HTML_ADMIN = '''
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7">لا توجد طلبات مسجلة حالياً</td></tr>
+            <tr><td colspan="8">لا توجد طلبات مسجلة حالياً</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -230,7 +254,7 @@ HTML_DRIVER = '''
 <body>
     <div class="card">
         <h2>لوحة السائق: {{ session['username'] }}</h2>
-        <h3>تسجيل بيانات الخدمة والتسعيرة</h3>
+        <h3>تسجيل بيانات الخدمة وبطاقة التعريف</h3>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
@@ -240,10 +264,15 @@ HTML_DRIVER = '''
           {% endif %}
         {% endwith %}
 
-        <form action="/add_truck" method="POST">
+        <form action="/add_truck" method="POST" enctype="multipart/form-data">
             <div class="form-group">
                 <label>رقم التعريف الوطني:</label>
                 <input type="text" name="national_id" placeholder="أدخل رقم التعريف الوطني" required>
+            </div>
+
+            <div class="form-group">
+                <label>صورة بطاقة التعريف الوطنية (للتحقق والأمان):</label>
+                <input type="file" name="id_card_image" accept="image/*,.pdf" required>
             </div>
             
             <div class="form-group">
@@ -285,8 +314,6 @@ HTML_CUSTOMER = '''
         body { font-family: Arial, sans-serif; padding: 15px; background-color: #f4f6f9; direction: rtl; margin: 0; }
         .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
         .container { max-width: 500px; margin: auto; }
-        
-        /* تصميم قائمة خيارات الشاحنات المماثل للتطبيقات الحديثة */
         .option-card {
             background: white;
             border: 2px solid #6c5ce7;
@@ -432,7 +459,6 @@ def driver_dashboard():
 def customer_dashboard():
     if session.get('role') != 'customer':
         return redirect(url_for('home'))
-    # عرض الشاحنات المقبولة فقط للزبائن
     trucks = Truck.query.filter_by(is_approved=True).all()
     return render_template_string(HTML_CUSTOMER, trucks=trucks)
 
@@ -444,22 +470,37 @@ def add_truck():
         cargo_description = request.form['cargo_description']
         capacity = request.form['capacity']
         price = request.form['price']
+        
+        # معالجة الصورة المرفوعة
+        file = request.files.get('id_card_image')
+        filename = None
+        if file and allowed_file(file.filename):
+            ext = file.filename.rsplit('.', 1)[1].lower()
+            filename = secure_filename(f"{session['username']}_{national_id}.{ext}")
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
         new_truck = Truck(
             national_id=national_id,
+            id_card_image=filename,
             phone_number=phone_number,
             cargo_description=cargo_description,
             driver_name=session['username'],
             capacity=float(capacity),
             price=float(price),
-            is_approved=False # يتطلب موافقة المدير أولاً
+            is_approved=False
         )
         db.session.add(new_truck)
         db.session.commit()
 
-        flash('تم إرسال الطلب بنجاح وبانتظار موافقة المسؤول.', 'success')
+        flash('تم إرسال الطلب وصورة البطاقة بنجاح، وهو بانتظار مراجعة المسؤول.', 'success')
 
     return redirect(url_for('driver_dashboard'))
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    if session.get('role') == 'admin' or session.get('username') == 'لعور حوسين':
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return "غير مسموح بفتح الملف", 403
 
 @app.route('/approve_truck/<int:truck_id>')
 def approve_truck(truck_id):
