@@ -29,6 +29,7 @@ class Truck(db.Model):
     capacity = db.Column(db.Float, nullable=False)
 
 with app.app_context():
+    db.drop_all() # Re-create table structure to apply new columns without SQL errors
     db.create_all()
     # Check if main admin exists, else create
     admin = User.query.filter_by(username='لعور حوسين').first()
