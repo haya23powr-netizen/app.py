@@ -44,6 +44,17 @@ class Truck(db.Model):
     rating = db.Column(db.Float, default=5.0)
     is_approved = db.Column(db.Boolean, default=False)
 
+# نموذج طلب الحجز المباشر من الزبون إلى السائق
+class BookingRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    driver_id = db.Column(db.Integer, db.ForeignKey('truck.id'), nullable=False)
+    customer_name = db.Column(db.String(100), nullable=False)
+    customer_phone = db.Column(db.String(20), nullable=False)
+    cargo_info = db.Column(db.String(200), nullable=False)
+    pickup_date = db.Column(db.String(20), nullable=False) # اليوم/التاريخ
+    pickup_time = db.Column(db.String(20), nullable=False) # الساعة
+    status = db.Column(db.String(20), default='pending') # 'pending', 'accepted', 'rejected'
+
 with app.app_context():
     db.create_all()
     admin = User.query.filter_by(username='لعور حوسين').first()
@@ -67,7 +78,7 @@ HTML_LOGIN = '''
         h2 { color: #2c3e50; margin-bottom: 20px; }
         .form-group { text-align: right; margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-        input, select, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
+        input, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
         button { background-color: #27ae60; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
         .link { margin-top: 15px; display: block; color: #2980b9; text-decoration: none; }
         .error { color: red; font-weight: bold; margin-bottom: 15px; }
@@ -180,11 +191,11 @@ HTML_ADMIN = '''
         <a href="/logout" style="color: #e74c3c; font-weight: bold; text-decoration: none;">تسجيل الخروج</a>
     </div>
     <div class="container">
-        <h3>إدارة ومراجعة طلبات الشاحنات</h3>
+        <h3>إدارة ومراجعة طلبات تفعيل السائقين</h3>
         <table>
             <tr>
                 <th>اسم السائق</th>
-                <th>المسار (من - إلى)</th>
+                <th>المسار</th>
                 <th>الهاتف / الواتساب</th>
                 <th>بطاقة التعريف</th>
                 <th>نوع الحمولة</th>
@@ -220,7 +231,7 @@ HTML_ADMIN = '''
                 </td>
                 <td>
                     {% if not truck.is_approved %}
-                        <a href="/approve_truck/{{ truck.id }}" class="btn-approve">موافقة</a>
+                        <a href="/approve_truck/{{ truck.id }}" class="btn-approve">موافقة وتفعيل</a>
                     {% endif %}
                     <a href="/delete_truck/{{ truck.id }}" class="btn-delete" onclick="return confirm('هل أنت تأكد من الحذف؟');">حذف</a>
                 </td>
@@ -242,24 +253,33 @@ HTML_DRIVER = '''
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>واجهة السائق</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background-color: #eef2f5; direction: rtl; }
-        .card { background: white; padding: 25px; border-radius: 12px; max-width: 500px; margin: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h2 { color: #d35400; text-align: center; margin-bottom: 5px; }
-        h3 { text-align: center; color: #555; margin-bottom: 20px; font-size: 16px; }
+        body { font-family: Arial, sans-serif; padding: 15px; background-color: #eef2f5; direction: rtl; margin: 0; }
+        .container { max-width: 600px; margin: auto; }
+        .header { background-color: #d35400; color: white; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .form-group { text-align: right; margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-        input, textarea, select, button { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        input, textarea, button { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
         button { background-color: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; }
-        button:hover { background-color: #d35400; }
-        .alert-success { background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 15px; text-align: center; font-weight: bold; }
-        .logout-link { display: block; text-align: center; margin-top: 20px; color: #c0392b; text-decoration: none; font-weight: bold; }
-        .status-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; text-align: center; }
+        .alert-success { background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; }
+        .status-box { background: #fff3cd; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; }
+        
+        .req-card { background: #fff; border: 2px solid #27ae60; border-radius: 12px; padding: 15px; margin-bottom: 12px; }
+        .req-title { font-weight: bold; color: #27ae60; font-size: 16px; margin-bottom: 5px; }
+        .req-time { background: #e8f8f5; color: #16a085; display: inline-block; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px; margin-bottom: 8px; }
+        .btn-act { padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block; margin-top: 8px; font-size: 13px; }
+        .btn-call { background: #2980b9; color: white; }
+        .btn-wa { background: #25D366; color: white; }
+        .btn-accept { background: #27ae60; color: white; }
+        .btn-reject { background: #e74c3c; color: white; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>لوحة السائق: {{ session['username'] }}</h2>
-        <h3>تسجيل بيانات الرحلة وبطاقة التعريف</h3>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">لوحة السائق: {{ session['username'] }}</h2>
+            <a href="/logout" style="color: white; font-size: 13px;">تسجيل الخروج</a>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
@@ -269,61 +289,59 @@ HTML_DRIVER = '''
           {% endif %}
         {% endwith %}
 
-        {% if my_truck %}
+        {% if not my_truck %}
+            <div class="card">
+                <h3>تسجيل بيانات السائق</h3>
+                <form action="/add_truck" method="POST" enctype="multipart/form-data">
+                    <div class="form-group"><label>رقم التعريف الوطني:</label><input type="text" name="national_id" required></div>
+                    <div class="form-group"><label>صورة بطاقة التعريف:</label><input type="file" name="id_card_image" accept="image/*,.pdf" required></div>
+                    <div class="form-group"><label>رقم الهاتف:</label><input type="tel" name="phone_number" required></div>
+                    <div class="form-group"><label>رقم الواتساب (بالصيغة الدولية مثلاً 21366...):</label><input type="tel" name="whatsapp_number"></div>
+                    <div class="form-group"><label>الإنطلاق من ولاية:</label><input type="text" name="from_wilaya" required></div>
+                    <div class="form-group"><label>الوصول إلى ولاية:</label><input type="text" name="to_wilaya" required></div>
+                    <div class="form-group"><label>نوع الحمولة / الشاحنة:</label><textarea name="cargo_description" required></textarea></div>
+                    <div class="form-group"><label>أقصى حمولة (بالطن):</label><input type="number" step="0.1" name="capacity" required></div>
+                    <div class="form-group"><label>السعر المعروض (دج):</label><input type="number" name="price" required></div>
+                    <button type="submit">إرسال الطلب للمدير</button>
+                </form>
+            </div>
+        {% elif not my_truck.is_approved %}
             <div class="status-box">
-                حالة طلبك الحالي: <strong>{% if my_truck.is_approved %}مقبول ومفعل ✅{% else %}بانتظار موافقة المدير ⏳{% endif %}</strong>
+                ⏳ حسابك حالياً بانتظار موافقة المدير (لعور حوسين). بمجرد التفعيل ستصلك طلبات الزبائن مباشرة هنا.
             </div>
+        {% else %}
+            <div class="status-box" style="background:#d4edda; color:#155724;">
+                ✅ حسابك مفعل ونشط لتقبل طلبات الزبائن!
+            </div>
+
+            <h3>طلبات الحجز الواردة من الزبائن:</h3>
+            {% for req in my_requests %}
+                <div class="req-card">
+                    <div class="req-title">وصلك طلب من الزبون: {{ req.customer_name }}</div>
+                    <div class="req-time">📅 الموعد المطلوبة: {{ req.pickup_date }} | ⏰ الساعة: {{ req.pickup_time }}</div>
+                    <div><strong>تفاصيل الحمولة:</strong> {{ req.cargo_info }}</div>
+                    <div><strong>رقم هاتف الزبون:</strong> {{ req.customer_phone }}</div>
+                    
+                    <div style="margin-top:10px;">
+                        <a href="tel:{{ req.customer_phone }}" class="btn-act btn-call">📞 اتصال هاتف</a>
+                        <a href="https://wa.me/{{ req.customer_phone }}?text=مرحباً%20أنا%20السائق%20تلقيت%20طلبك" target="_blank" class="btn-act btn-wa">💬 واتساب</a>
+                    </div>
+
+                    <div style="margin-top:10px;">
+                        {% if req.status == 'pending' %}
+                            <a href="/respond_request/{{ req.id }}/accepted" class="btn-act btn-accept">✅ قبول الطلب</a>
+                            <a href="/respond_request/{{ req.id }}/rejected" class="btn-act btn-reject">❌ رفض الطلب</a>
+                        {% elif req.status == 'accepted' %}
+                            <span style="color:#27ae60; font-weight:bold;">لقد قمت بـ (قبول) هذا الطلب تم التواصل للتنفيذ.</span>
+                        {% else %}
+                            <span style="color:#e74c3c; font-weight:bold;">تم (رفض) هذا الطلب.</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <p style="text-align:center; color:#7f8c8d;">لا توجد طلبات حجز جديدة حتى الآن.</p>
+            {% endfor %}
         {% endif %}
-
-        <form action="/add_truck" method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-                <label>رقم التعريف الوطني:</label>
-                <input type="text" name="national_id" placeholder="أدخل رقم التعريف الوطني" required>
-            </div>
-
-            <div class="form-group">
-                <label>صورة بطاقة التعريف الوطنية:</label>
-                <input type="file" name="id_card_image" accept="image/*,.pdf" required>
-            </div>
-            
-            <div class="form-group">
-                <label>رقم الهاتف للاتصال:</label>
-                <input type="tel" name="phone_number" placeholder="مثال: 0661234567" required>
-            </div>
-
-            <div class="form-group">
-                <label>رقم الواتساب (اختياري - الصيغة الدولية):</label>
-                <input type="tel" name="whatsapp_number" placeholder="مثال: 213661234567">
-            </div>
-
-            <div class="form-group">
-                <label>الإنطلاق من ولاية:</label>
-                <input type="text" name="from_wilaya" placeholder="مثال: سكيكدة، الجزائر، تمنراست..." required>
-            </div>
-
-            <div class="form-group">
-                <label>الوصول إلى ولاية:</label>
-                <input type="text" name="to_wilaya" placeholder="مثال: ورقلة، وهران، جميع الولايات..." required>
-            </div>
-
-            <div class="form-group">
-                <label>نوع الشاحنة / الحمولة:</label>
-                <textarea name="cargo_description" placeholder="مثال: شاحنة مغلقة، نقل أثاث، مواد بناء..." rows="2" required></textarea>
-            </div>
-
-            <div class="form-group">
-                <label>أقصى حمولة (بالطن):</label>
-                <input type="number" step="0.1" name="capacity" placeholder="مثال: 10" required>
-            </div>
-
-            <div class="form-group">
-                <label>السعر المطلوب (بالدينار الجزائري دج):</label>
-                <input type="number" name="price" placeholder="مثال: 15000" required>
-            </div>
-
-            <button type="submit">إرسال الطلب للمسؤول</button>
-        </form>
-        <a class="logout-link" href="/logout">تسجيل الخروج</a>
     </div>
 </body>
 </html>
@@ -335,97 +353,97 @@ HTML_CUSTOMER = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>خيارات الشاحنات المتاحة</title>
+    <title>قائمة السائقين والطلب</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 15px; background-color: #f4f6f9; direction: rtl; margin: 0; }
-        .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
         .container { max-width: 550px; margin: auto; }
-        .search-box { background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .search-box input { width: 48%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
-        .search-box button { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+        .header { background-color: #2c3e50; color: white; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
         
-        .option-card {
-            background: white;
-            border: 2px solid #6c5ce7;
-            border-radius: 16px;
-            padding: 15px 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 12px rgba(108, 92, 231, 0.08);
-        }
-        .option-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .option-title { font-size: 18px; font-weight: bold; color: #2d3436; }
-        .option-route { font-size: 13px; color: #0984e3; font-weight: bold; background: #e3f2fd; padding: 4px 8px; border-radius: 6px; }
-        .option-sub { font-size: 13px; color: #636e72; margin-bottom: 10px; }
-        .option-price { font-size: 20px; font-weight: bold; color: #2d3436; margin-bottom: 10px; }
-        .price-currency { font-size: 14px; font-weight: normal; color: #636e72; }
+        .driver-card { background: white; border: 2px solid #6c5ce7; border-radius: 16px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .driver-name { font-size: 18px; font-weight: bold; color: #2d3436; }
+        .driver-sub { font-size: 13px; color: #636e72; margin-top: 4px; }
+        .price-tag { font-size: 18px; font-weight: bold; color: #27ae60; margin: 8px 0; }
         
-        .actions-btn { display: flex; gap: 8px; margin-top: 10px; }
-        .btn-call {
-            flex: 1;
-            background-color: #2980b9;
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 14px;
-            text-align: center;
-        }
-        .btn-whatsapp {
-            flex: 1;
-            background-color: #25D366;
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 14px;
-            text-align: center;
-        }
-        .empty-msg { text-align: center; color: #7f8c8d; background: white; padding: 20px; border-radius: 12px; }
+        .btn-book { background: #6c5ce7; color: white; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; width: 100%; margin-top: 8px; }
+        .booking-form { display: none; background: #f8f9fa; padding: 12px; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; }
+        .form-group { text-align: right; margin-bottom: 8px; }
+        .form-group label { display: block; font-size: 12px; font-weight: bold; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-size: 13px; }
+        
+        .alert { background: #d4edda; color: #155724; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; }
+        .my-req-box { background: white; padding: 15px; border-radius: 12px; margin-top: 20px; }
     </style>
+    <script>
+        function toggleForm(id) {
+            var f = document.getElementById('form-' + id);
+            if (f.style.display === 'block') { f.style.display = 'none'; }
+            else { f.style.display = 'block'; }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h3 style="margin: 0;">أهلاً بك {{ session['username'] }}</h3>
-            <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.8;">اختر الشاحنة المناسبة لنقل حمولتك</p>
+            <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.8;">اختر السائق المناسب واطلب خدمته مباشرة</p>
             <a href="/logout" style="color: #ff7675; font-size: 12px; text-decoration: none; display: inline-block; margin-top: 8px;">تسجيل الخروج</a>
         </div>
 
-        <!-- فلتر البحث حسب الولايات -->
-        <form class="search-box" method="GET" action="/customer">
-            <div style="display: flex; justify-content: space-between;">
-                <input type="text" name="from_search" placeholder="من ولاية..." value="{{ request.args.get('from_search', '') }}">
-                <input type="text" name="to_search" placeholder="إلى ولاية..." value="{{ request.args.get('to_search', '') }}">
-            </div>
-            <button type="submit">بحث عن شاحنة</button>
-        </form>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
 
-        {% for truck in trucks %}
-        <div class="option-card">
-            <div class="option-header">
-                <div class="option-title">{{ truck.cargo_description }}</div>
-                <div class="option-route">{{ truck.from_wilaya }} ➔ {{ truck.to_wilaya }}</div>
-            </div>
-            <div class="option-sub">
-                السائق: <strong>{{ truck.driver_name }}</strong> (⭐ {{ truck.rating }}) • الحمولة: {{ truck.capacity }} طن
-            </div>
-            <div class="option-price">{{ truck.price }} <span class="price-currency">دج</span></div>
+        <h3 style="color:#2c3e50;">السائقون المتوفرون والمفعلون:</h3>
 
-            <!-- خيارات الاتصال أو واتساب -->
-            <div class="actions-btn">
-                <a href="tel:{{ truck.phone_number }}" class="btn-call">📞 اتصال هاتف</a>
-                {% if truck.whatsapp_number %}
-                    <a href="https://wa.me/{{ truck.whatsapp_number }}?text=مرحباً،%20أنا%20مهتم%20بحجز%20الشاحنة" target="_blank" class="btn-whatsapp">💬 مراسلة واتساب</a>
-                {% endif %}
+        {% for truck in drivers %}
+        <div class="driver-card">
+            <div class="driver-name">{{ truck.driver_name }} ⭐ {{ truck.rating }}</div>
+            <div class="driver-sub">📍 المسار: {{ truck.from_wilaya }} ➔ {{ truck.to_wilaya }}</div>
+            <div class="driver-sub">🚛 الشاحنة: {{ truck.cargo_description }} (أقصى حمولة {{ truck.capacity }} طن)</div>
+            <div class="price-tag">السعر المقترح: {{ truck.price }} دج</div>
+
+            <button class="btn-book" onclick="toggleForm({{ truck.id }})">طلب حجز مع هذا السائق 🚚</button>
+
+            <!-- نموذج الطلب الخفي يظهر عند الضغط -->
+            <div id="form-{{ truck.id }}" class="booking-form">
+                <form action="/book_driver/{{ truck.id }}" method="POST">
+                    <div class="form-group"><label>رقم هاتفك للتواصل:</label><input type="tel" name="customer_phone" required></div>
+                    <div class="form-group"><label>وصف حمولتك والوزن:</label><textarea name="cargo_info" rows="2" required></textarea></div>
+                    <div style="display:flex; gap:8px;">
+                        <div class="form-group" style="flex:1;"><label>تاريخ النقل (اليوم):</label><input type="date" name="pickup_date" required></div>
+                        <div class="form-group" style="flex:1;"><label>توقيت النقل (الساعة):</label><input type="time" name="pickup_time" required></div>
+                    </div>
+                    <button type="submit" style="background:#27ae60; color:white; border:none; padding:8px; border-radius:6px; font-weight:bold; cursor:pointer; width:100%; margin-top:5px;">إرسال الطلب للسائق</button>
+                </form>
             </div>
         </div>
         {% else %}
-        <div class="empty-msg">
-            لا توجد شاحنات معتمدة متطابقة مع البحث حالياً.
-        </div>
+        <p style="text-align:center; color:#7f8c8d;">لا يوجد سائقون مفعلون حالياً، يرجى المحاولة لاحقاً.</p>
         {% endfor %}
+
+        <!-- متابعة حالة الطلبات السابقة للزبون -->
+        <div class="my-req-box">
+            <h4>متابعة حالة طلباتي:</h4>
+            {% for req in my_requests %}
+                <div style="border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px;">
+                    طلب لـ {{ req.pickup_date }} (الساعة {{ req.pickup_time }}) - 
+                    الحالة: 
+                    {% if req.status == 'pending' %}
+                        <strong style="color:#f39c12;">بانتظار موافقة السائق ⏳</strong>
+                    {% elif req.status == 'accepted' %}
+                        <strong style="color:#27ae60;">تم قبول طلبك من السائق ✅</strong>
+                    {% else %}
+                        <strong style="color:#e74c3c;">تم اعتذار/رفض الطلب ❌</strong>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p style="font-size:12px; color:#999;">لم تقم بأي طلب حجز حتى الآن.</p>
+            {% endfor %}
+        </div>
     </div>
 </body>
 </html>
@@ -506,28 +524,56 @@ def admin_dashboard():
 def driver_dashboard():
     if session.get('role') != 'driver':
         return redirect(url_for('home'))
-    # تصحيح الخطأ لجلب أحدث طلب بناءً على id التنازلي
+    
     my_truck = Truck.query.filter_by(driver_name=session['username']).order_by(Truck.id.desc()).first()
-    return render_template_string(HTML_DRIVER, my_truck=my_truck)
+    my_requests = []
+    if my_truck:
+        my_requests = BookingRequest.query.filter_by(driver_id=my_truck.id).order_by(BookingRequest.id.desc()).all()
+        
+    return render_template_string(HTML_DRIVER, my_truck=my_truck, my_requests=my_requests)
 
 @app.route('/customer')
 def customer_dashboard():
     if session.get('role') != 'customer':
         return redirect(url_for('home'))
     
-    from_search = request.args.get('from_search', '')
-    to_search = request.args.get('to_search', '')
+    drivers = Truck.query.filter_by(is_approved=True).all()
+    my_requests = BookingRequest.query.filter_by(customer_name=session['username']).order_by(BookingRequest.id.desc()).all()
+    return render_template_string(HTML_CUSTOMER, drivers=drivers, my_requests=my_requests)
 
-    query = Truck.query.filter_by(is_approved=True)
+@app.route('/book_driver/<int:driver_id>', methods=['POST'])
+def book_driver(driver_id):
+    if session.get('role') == 'customer':
+        customer_phone = request.form['customer_phone']
+        cargo_info = request.form['cargo_info']
+        pickup_date = request.form['pickup_date']
+        pickup_time = request.form['pickup_time']
 
-    if from_search:
-        query = query.filter(Truck.from_wilaya.contains(from_search))
-    if to_search:
-        # تصحيح الاسم الإملائي للعمود to_wilaya
-        query = query.filter(Truck.to_wilaya.contains(to_search))
+        new_req = BookingRequest(
+            driver_id=driver_id,
+            customer_name=session['username'],
+            customer_phone=customer_phone,
+            cargo_info=cargo_info,
+            pickup_date=pickup_date,
+            pickup_time=pickup_time,
+            status='pending'
+        )
+        db.session.add(new_req)
+        db.session.commit()
 
-    trucks = query.all()
-    return render_template_string(HTML_CUSTOMER, trucks=trucks)
+        flash('تم إرسال طلب الحجز إلى السائق بنجاح! ينتظر موافقته.', 'success')
+
+    return redirect(url_for('customer_dashboard'))
+
+@app.route('/respond_request/<int:req_id>/<string:action>')
+def respond_request(req_id, action):
+    if session.get('role') == 'driver':
+        req = BookingRequest.query.get(req_id)
+        if req and action in ['accepted', 'rejected']:
+            req.status = action
+            db.session.commit()
+            flash(f'تم تحديث حالة الطلب إلى ({action}).', 'success')
+    return redirect(url_for('driver_dashboard'))
 
 @app.route('/add_truck', methods=['POST'])
 def add_truck():
@@ -564,7 +610,7 @@ def add_truck():
         db.session.add(new_truck)
         db.session.commit()
 
-        flash('تم إرسال الطلب بنجاح، وهو حالياً بانتظار موافقة المسؤول.', 'success')
+        flash('تم إرسال بيانات السائق بنجاح، وهي بانتظار موافقة المدير.', 'success')
 
     return redirect(url_for('driver_dashboard'))
 
